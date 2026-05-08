@@ -1,0 +1,377 @@
+// This is your Prisma schema file
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────
+
+enum CompanyPlan {
+  pilot
+  starter
+  growth
+  enterprise
+}
+
+enum CompanyStatus {
+  active
+  suspended
+  cancelled
+}
+
+enum UserRole {
+  super_admin
+  admin_empresa
+  recruiter
+  viewer
+}
+
+enum UserStatus {
+  active
+  inactive
+  pending
+}
+
+enum CampaignStatus {
+  active
+  paused
+  closed
+}
+
+enum CandidateStatus {
+  pending
+  started
+  completed
+  expired
+  cancelled
+}
+
+enum RecruiterDecision {
+  recommended
+  review
+  not_recommended
+}
+
+enum SessionStatus {
+  created
+  in_progress
+  completed
+  error
+  timeout
+}
+
+enum AnalysisStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum TurnSpeaker {
+  agent
+  candidate
+}
+
+enum EvalRecommendation {
+  recommended
+  review
+  not_recommended
+}
+
+// ─────────────────────────────────────────────────────────────
+// COMPANY
+// ─────────────────────────────────────────────────────────────
+
+model Company {
+  id              String        @id @default(uuid())
+  name            String        @db.VarChar(200)
+  country         String        @db.VarChar(10)     // AR, MX, CO, CL, PE
+  taxId           String?       @db.VarChar(50)     // CUIT, RFC, NIT
+  plan            CompanyPlan   @default(pilot)
+  status          CompanyStatus @default(active)
+  maxEvaluations  Int           @default(100)
+  settings        Json?                              // configuraciones específicas
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  users           User[]
+  jobPositions    JobPosition[]
+  campaigns       EvaluationCampaign[]
+  candidates      Candidate[]
+  auditLogs       AuditLog[]
+
+  @@map("companies")
+}
+
+// ─────────────────────────────────────────────────────────────
+// USER
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String      @id @default(uuid())
+  companyId     String?                            // null si super_admin
+  email         String      @unique @db.VarChar(254)
+  passwordHash  String      @db.VarChar(255)
+  firstName     String      @db.VarChar(100)
+  lastName      String      @db.VarChar(100)
+  role          UserRole
+  status        UserStatus  @default(pending)
+  lastLoginAt   DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  company       Company?    @relation(fields: [companyId], references: [id])
+
+  createdCandidates   Candidate[]  @relation("CandidateCreatedBy")
+  decisionCandidates  Candidate[]  @relation("CandidateDecisionBy")
+  auditLogs           AuditLog[]
+  campaigns           EvaluationCampaign[]
+
+  @@index([companyId])
+  @@index([email])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────
+// JOB POSITION
+// ─────────────────────────────────────────────────────────────
+
+model JobPosition {
+  id               String   @id @default(uuid())
+  companyId        String
+  basePositionKey  String   @db.VarChar(50)
+  // Values: customer_support | ventas | backoffice | operaciones_logisticas
+  name             String   @db.VarChar(200)
+  description      String?  @db.Text
+  // competencies: [{ id, name, dimension, weight, isActive }]
+  // dimension: cognitiva | conductual | comunicacion
+  competencies     Json
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company          Company  @relation(fields: [companyId], references: [id])
+  campaigns        EvaluationCampaign[]
+
+  @@index([companyId])
+  @@unique([companyId, basePositionKey])
+  @@map("job_positions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// EVALUATION CAMPAIGN
+// ─────────────────────────────────────────────────────────────
+
+model EvaluationCampaign {
+  id              String         @id @default(uuid())
+  companyId       String
+  jobPositionId   String?
+  name            String         @db.VarChar(200)
+  description     String?        @db.Text
+  status          CampaignStatus @default(active)
+  linkExpiryDays  Int            @default(7)
+  createdById     String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  company         Company        @relation(fields: [companyId], references: [id])
+  jobPosition     JobPosition?   @relation(fields: [jobPositionId], references: [id])
+  createdBy       User           @relation(fields: [createdById], references: [id])
+  candidates      Candidate[]
+
+  @@index([companyId])
+  @@index([status])
+  @@map("evaluation_campaigns")
+}
+
+// ─────────────────────────────────────────────────────────────
+// CANDIDATE
+// ─────────────────────────────────────────────────────────────
+
+model Candidate {
+  id                 String             @id @default(uuid())
+  companyId          String
+  campaignId         String
+  firstName          String             @db.VarChar(100)
+  lastName           String             @db.VarChar(100)
+  email              String             @db.VarChar(254)
+  phone              String?            @db.VarChar(30)
+  status             CandidateStatus    @default(pending)
+  evalToken          String             @unique @db.VarChar(64)
+  tokenExpiresAt     DateTime
+  recruiterDecision  RecruiterDecision?
+  decisionAt         DateTime?
+  decisionById       String?
+  decisionNotes      String?            @db.Text
+  createdById        String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  company            Company            @relation(fields: [companyId], references: [id])
+  campaign           EvaluationCampaign @relation(fields: [campaignId], references: [id])
+  decisionBy         User?              @relation("CandidateDecisionBy", fields: [decisionById], references: [id])
+  createdBy          User               @relation("CandidateCreatedBy", fields: [createdById], references: [id])
+
+  consent            Consent?
+  session            EvaluationSession?
+
+  @@index([companyId])
+  @@index([campaignId])
+  @@index([evalToken])
+  @@index([status])
+  @@map("candidates")
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONSENT
+// ─────────────────────────────────────────────────────────────
+
+model Consent {
+  id               String   @id @default(uuid())
+  candidateId      String   @unique
+  accepted         Boolean
+  acceptedAt       DateTime
+  ipAddress        String?  @db.VarChar(45)
+  userAgent        String?  @db.Text
+  consentVersion   String   @default("v1") @db.VarChar(10)
+  consentTextHash  String?  @db.VarChar(64)
+  createdAt        DateTime @default(now())
+
+  candidate        Candidate @relation(fields: [candidateId], references: [id])
+
+  @@map("consents")
+}
+
+// ─────────────────────────────────────────────────────────────
+// EVALUATION SESSION
+// ─────────────────────────────────────────────────────────────
+
+model EvaluationSession {
+  id              String         @id @default(uuid())
+  candidateId     String         @unique
+  status          SessionStatus  @default(created)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  durationSeconds Int?
+  turnCount       Int            @default(0)
+  audioUrl        String?        @db.Text          // Railway Buckets URL
+  analysisStatus  AnalysisStatus @default(pending)
+  errorMessage    String?        @db.Text
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  candidate       Candidate      @relation(fields: [candidateId], references: [id])
+  turns           ConversationTurn[]
+  score           Score?
+  report          Report?
+
+  @@index([status])
+  @@index([analysisStatus])
+  @@map("evaluation_sessions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONVERSATION TURN
+// ─────────────────────────────────────────────────────────────
+
+model ConversationTurn {
+  id            String      @id @default(uuid())
+  sessionId     String
+  turnNumber    Int
+  speaker       TurnSpeaker
+  contentText   String      @db.Text
+  audioUrl      String?     @db.Text           // Railway Buckets URL (candidato)
+  dimension     String?     @db.VarChar(50)    // cognitiva | conductual | comunicacion
+  questionType  String?     @db.VarChar(50)    // situacional | directa | consistencia
+  rawSttText    String?     @db.Text           // texto crudo STT
+  sttConfidence Float?
+  createdAt     DateTime    @default(now())
+
+  session       EvaluationSession @relation(fields: [sessionId], references: [id])
+
+  @@index([sessionId])
+  @@index([sessionId, turnNumber])
+  @@map("conversation_turns")
+}
+
+// ─────────────────────────────────────────────────────────────
+// SCORE
+// ─────────────────────────────────────────────────────────────
+
+model Score {
+  id                  String              @id @default(uuid())
+  sessionId           String              @unique
+  cognitiveScore      Float               // 0-100
+  behavioralScore     Float               // 0-100
+  communicationScore  Float               // 0-100
+  consistencyScore    Float               // 0-100
+  globalScore         Float               // 0-100
+  recommendation      EvalRecommendation
+  riskFlags           Json                // string[]
+  strengths           Json                // string[]
+  dimensionDetails    Json                // detalle por dimensión
+  rawAnalysis         Json                // output completo del LLM
+  modelVersion        String              @db.VarChar(50)
+  createdAt           DateTime            @default(now())
+
+  session             EvaluationSession   @relation(fields: [sessionId], references: [id])
+  report              Report?
+
+  @@index([recommendation])
+  @@index([globalScore])
+  @@map("scores")
+}
+
+// ─────────────────────────────────────────────────────────────
+// REPORT
+// ─────────────────────────────────────────────────────────────
+
+model Report {
+  id               String    @id @default(uuid())
+  sessionId        String    @unique
+  scoreId          String    @unique
+  executiveSummary String    @db.Text
+  pdfUrl           String?   @db.Text          // Railway Buckets URL
+  pdfGeneratedAt   DateTime?
+  viewCount        Int       @default(0)
+  downloadCount    Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  session          EvaluationSession @relation(fields: [sessionId], references: [id])
+  score            Score             @relation(fields: [scoreId], references: [id])
+
+  @@map("reports")
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUDIT LOG
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  companyId   String?
+  userId      String?
+  action      String   @db.VarChar(100)
+  entityType  String?  @db.VarChar(50)
+  entityId    String?  @db.Uuid
+  metadata    Json?
+  ipAddress   String?  @db.VarChar(45)
+  createdAt   DateTime @default(now())
+
+  company     Company? @relation(fields: [companyId], references: [id])
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@index([companyId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
