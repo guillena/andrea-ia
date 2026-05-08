@@ -10,13 +10,6 @@ async function bootstrap() {
     logger: ['error', 'warn', 'log'],
   });
 
-  // ── Seguridad ─────────────────────────────────────────────
-  app.use(helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-  }));
-  app.use(compression());
-
-  // ── CORS ──────────────────────────────────────────────────
   const allowedOrigins = [
     'https://andrea-ia-frontend-production.up.railway.app',
     'http://localhost:3000',
@@ -30,7 +23,33 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  // ── Validación global ─────────────────────────────────────
+  app.use((req, res, next) => {
+    const origin = req.headers.origin as string;
+
+    if (allowedOrigins.includes(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Vary', 'Origin');
+    }
+
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+
+    next();
+  });
+
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
+
+  app.use(compression());
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -40,10 +59,8 @@ async function bootstrap() {
     }),
   );
 
-  // ── Prefijo global de API ──────────────────────────────────
   app.setGlobalPrefix('api/v1');
 
-  // ── Swagger (solo en desarrollo) ──────────────────────────
   if (process.env.NODE_ENV !== 'production') {
     const config = new DocumentBuilder()
       .setTitle('ANDREA API')
@@ -51,14 +68,15 @@ async function bootstrap() {
       .setVersion('1.0')
       .addBearerAuth()
       .build();
+
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, document);
-    console.log(`📚 Swagger disponible en: http://localhost:${process.env.PORT || 3000}/api/docs`);
   }
 
   const port = process.env.PORT || 3000;
-  await app.listen(port);
-  console.log(`🚀 ANDREA Backend corriendo en: http://localhost:${port}/api/v1`);
+  await app.listen(port, '0.0.0.0');
+
+  console.log(`ANDREA Backend corriendo en puerto ${port}`);
 }
 
 bootstrap();
