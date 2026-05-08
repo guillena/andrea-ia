@@ -17,19 +17,8 @@ async function bootstrap() {
   app.use(compression());
 
   // ── CORS ──────────────────────────────────────────────────
-  const allowedOrigins = [
-    'http://localhost:5173',
-    'http://localhost:3001',
-    process.env.FRONTEND_URL,
-  ].filter(Boolean);
-
   app.enableCors({
-    origin: (origin, callback) => {
-      // Permitir requests sin origin (ej: Postman, mobile)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      callback(new Error(`CORS bloqueado para origin: ${origin}`));
-    },
+    origin: true, // TODO: restringir a FRONTEND_URL en producción estable
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
