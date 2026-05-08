@@ -17,8 +17,19 @@ async function bootstrap() {
   app.use(compression());
 
   // ── CORS ──────────────────────────────────────────────────
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3001',
+    process.env.FRONTEND_URL,
+  ].filter(Boolean);
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      // Permitir requests sin origin (ej: Postman, mobile)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`CORS bloqueado para origin: ${origin}`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
