@@ -17,8 +17,14 @@ async function bootstrap() {
   app.use(compression());
 
   // ── CORS ──────────────────────────────────────────────────
+  const allowedOrigins = [
+    'https://andrea-ia-frontend-production.up.railway.app',
+    'http://localhost:3000',
+    'http://localhost:5173',
+  ];
+
   app.enableCors({
-    origin: true, // TODO: restringir a FRONTEND_URL en producción estable
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
