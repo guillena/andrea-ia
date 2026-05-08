@@ -172,7 +172,6 @@ export default function EvalMicTest() {
           <button
             className="btn btn-primary btn-lg w-full"
             onClick={startTest}
-            disabled={status === 'testing'}
           >
             <Mic size={18} />
             {status === 'error' ? 'Intentar de nuevo' : 'Probar micrófono'}
