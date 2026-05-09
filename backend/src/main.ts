@@ -10,6 +10,8 @@ async function bootstrap() {
     logger: ['error', 'warn', 'log'],
   });
 
+  app.setGlobalPrefix('api/v1');
+
   const allowedOrigins = [
     'https://andrea-ia-frontend-production.up.railway.app',
     'http://localhost:3000',
@@ -21,25 +23,6 @@ async function bootstrap() {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-  });
-
-  app.use((req, res, next) => {
-    const origin = req.headers.origin as string;
-
-    if (allowedOrigins.includes(origin)) {
-      res.header('Access-Control-Allow-Origin', origin);
-      res.header('Vary', 'Origin');
-    }
-
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-    if (req.method === 'OPTIONS') {
-      return res.sendStatus(204);
-    }
-
-    next();
   });
 
   app.use(
@@ -58,8 +41,6 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
-
-  app.setGlobalPrefix('api/v1');
 
   if (process.env.NODE_ENV !== 'production') {
     const config = new DocumentBuilder()
