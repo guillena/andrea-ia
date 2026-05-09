@@ -31,3 +31,8 @@ npm run start:dev
 
 cd frontend
 npm run dev
+
+# Commit
+git add .
+git commit -m "CORS 1"
+git push origin main
