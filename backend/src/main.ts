@@ -7,7 +7,7 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    logger: ['error', 'warn', 'log', 'debug'],
+    logger: ['error', 'warn'],
   });
 
   app.setGlobalPrefix('api/v1');
@@ -72,18 +72,6 @@ async function bootstrap() {
   const port = Number(process.env.PORT) || 3000;
 
   const server = app.getHttpAdapter().getInstance();
-
-  server.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok' });
-  });
-
-  server.options('/api/v1/auth/login', (req, res) => {
-    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.status(204).send();
-  });
 
   await app.listen(port, '0.0.0.0');
 
