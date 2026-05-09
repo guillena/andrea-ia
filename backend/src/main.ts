@@ -1,4 +1,3 @@
-```ts
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -83,8 +82,7 @@ async function bootstrap() {
 
   await app.listen(port, '0.0.0.0');
 
-  console.log(`ANDREA Backend corriendo en puerto ${ port } `);
+  console.log(`ANDREA Backend corriendo en puerto ${port} `);
 }
 
 bootstrap();
-```
