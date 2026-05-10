@@ -1,17 +1,17 @@
 PrismaClientKnownRequestError: 
-Invalid `this.prisma.conversationTurn.create()` invocation in
-C:\Users\Guille\Documents\Projects\AndreaIA\backend\src\modules\evaluation\evaluation.service.ts:148:40
+Invalid `this.prisma.evaluationSession.upsert()` invocation in
+C:\Users\Guille\Documents\Projects\AndreaIA\backend\src\modules\evaluation\evaluation.service.ts:110:57
 
-  145 const introAudioUrl = await this.storage.uploadAgentAudio(introAudioBuffer, session.id, 0);
-  146 
-  147 // Guardar turno del agente (intro)
-→ 148 await this.prisma.conversationTurn.create(
-The provided value for the column is too long for the column's type. Column: (not available)
+  107 }
+  108 
+  109 // Obtener o crear sesión (atómico para evitar race conditions)
+→ 110 const session = await this.prisma.evaluationSession.upsert(
+Unique constraint failed on the fields: (`candidateId`)
     at $n.handleRequestError (C:\Users\Guille\Documents\Projects\AndreaIA\backend\node_modules\@prisma\client\runtime\library.js:121:7315)
     at $n.handleAndLogRequestError (C:\Users\Guille\Documents\Projects\AndreaIA\backend\node_modules\@prisma\client\runtime\library.js:121:6623)
     at $n.request (C:\Users\Guille\Documents\Projects\AndreaIA\backend\node_modules\@prisma\client\runtime\library.js:121:6307)
     at async l (C:\Users\Guille\Documents\Projects\AndreaIA\backend\node_modules\@prisma\client\runtime\library.js:130:9633)
-    at async EvaluationService.startSession (C:\Users\Guille\Documents\Projects\AndreaIA\backend\src\modules\evaluation\evaluation.service.ts:148:5)
+    at async EvaluationService.startSession (C:\Users\Guille\Documents\Projects\AndreaIA\backend\src\modules\evaluation\evaluation.service.ts:110:21)
     at async EvaluationController.startSession (C:\Users\Guille\Documents\Projects\AndreaIA\backend\src\modules\evaluation\evaluation.controller.ts:40:14)
     at async C:\Users\Guille\Documents\Projects\AndreaIA\backend\node_modules\@nestjs\core\router\router-execution-context.js:46:28
     at async C:\Users\Guille\Documents\Projects\AndreaIA\backend\node_modules\@nestjs\core\router\router-proxy.js:9:17

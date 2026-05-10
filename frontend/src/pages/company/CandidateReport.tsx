@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Download, MessageSquare, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { Download, MessageSquare, ChevronDown, ChevronUp, AlertCircle, RefreshCw } from 'lucide-react';
 import { candidatesApi } from '../../services/api';
 
 const DIM_LABEL: Record<string, string> = {
@@ -20,9 +20,16 @@ export default function CandidateReport() {
   const [notes, setNotes] = useState('');
   const [decisionSaved, setDecisionSaved] = useState(false);
 
-  const { data: candidate, isLoading } = useQuery({
+  const { data: candidate, isLoading, isError } = useQuery({
     queryKey: ['candidate-report', candidateId],
     queryFn: () => candidatesApi.report(candidateId!),
+    // Refetch automático cada 5s SOLO si el análisis está activamente en curso
+    refetchInterval: (query) => {
+      const d = query.state.data as any;
+      if (!d?.session) return false;
+      const s = d.session.analysisStatus;
+      return (s === 'processing' || s === 'pending') ? 5000 : false;
+    },
   });
 
   const { data: transcript } = useQuery({
@@ -39,7 +46,16 @@ export default function CandidateReport() {
     },
   });
 
+  const reanalyzeMutation = useMutation({
+    mutationFn: () => candidatesApi.reanalyze(candidateId!),
+    onSuccess: () => {
+      // Invalidar para que el refetchInterval arranque
+      queryClient.invalidateQueries({ queryKey: ['candidate-report', candidateId] });
+    },
+  });
+
   if (isLoading) return <div><p className="text-muted">Cargando reporte...</p></div>;
+  if (isError) return <div><p className="text-muted">Error al cargar el reporte. Verificá tu sesión e intentá de nuevo.</p></div>;
   if (!candidate) return <div><p className="text-muted">Candidato no encontrado.</p></div>;
 
   const score = candidate.session?.score;
@@ -62,7 +78,7 @@ export default function CandidateReport() {
     s >= 70 ? 'high' : s >= 40 ? 'medium' : 'low';
 
   return (
-    <div style={{ maxWidth: '800px' }}>
+    <div style={{ maxWidth: '800px', margin: '0 auto' }}>
       <button className="btn btn-ghost btn-sm" style={{ marginBottom: '16px' }} onClick={() => navigate(-1)}>
         ← Volver
       </button>
@@ -102,13 +118,44 @@ export default function CandidateReport() {
 
       {!score ? (
         <div className="card text-center" style={{ padding: '48px' }}>
-          <p className="text-muted">
-            {candidate.session?.analysisStatus === 'processing'
-              ? '⏳ El reporte se está generando...'
-              : candidate.session?.analysisStatus === 'failed'
-              ? '❌ Error al generar el reporte. El equipo fue notificado.'
-              : 'El candidato aún no completó la evaluación.'}
-          </p>
+          {candidate.session?.analysisStatus === 'processing' ? (
+            <>
+              <p className="text-muted" style={{ marginBottom: '12px' }}>⏳ Generando reporte... Esto puede tomar unos segundos.</p>
+              <p className="text-xs text-muted">La página se actualizará automáticamente.</p>
+            </>
+          ) : candidate.session?.analysisStatus === 'failed' ? (
+            <>
+              <p className="text-muted" style={{ marginBottom: '16px' }}>❌ Error al generar el reporte.</p>
+              <button
+                className="btn btn-primary"
+                disabled={reanalyzeMutation.isPending}
+                onClick={() => reanalyzeMutation.mutate()}
+              >
+                <RefreshCw size={14} />
+                {reanalyzeMutation.isPending ? 'Iniciando...' : 'Reintentar análisis'}
+              </button>
+            </>
+          ) : candidate.session?.analysisStatus === 'pending' || !candidate.session ? (
+            <>
+              <p className="text-muted" style={{ marginBottom: '16px' }}>
+                {!candidate.session
+                  ? 'El candidato no inició la evaluación.'
+                  : 'El análisis está pendiente de procesamiento.'}
+              </p>
+              {candidate.status === 'completed' && candidate.session && (
+                <button
+                  className="btn btn-primary"
+                  disabled={reanalyzeMutation.isPending}
+                  onClick={() => reanalyzeMutation.mutate()}
+                >
+                  <RefreshCw size={14} />
+                  {reanalyzeMutation.isPending ? 'Iniciando...' : 'Generar reporte ahora'}
+                </button>
+              )}
+            </>
+          ) : (
+            <p className="text-muted">El candidato aún no completó la evaluación.</p>
+          )}
         </div>
       ) : (
         <>

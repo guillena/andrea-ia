@@ -9,6 +9,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AzureSpeechService } from '../../services/azure-speech.service';
 import { AzureOpenAIService } from '../../services/azure-openai.service';
 import { StorageService } from '../../services/storage.service';
+import { AnalysisService } from './analysis.service';
 
 const MAX_TURNS = 12; // máximo de turns del candidato por sesión
 
@@ -22,6 +23,7 @@ export class EvaluationService {
     private openai: AzureOpenAIService,
     private storage: StorageService,
     private config: ConfigService,
+    private analysisService: AnalysisService,
     @InjectQueue('analysis') private analysisQueue: Queue,
   ) {}
 
@@ -104,20 +106,16 @@ export class EvaluationService {
       throw new ForbiddenException('El candidato no ha aceptado el consentimiento');
     }
 
-    // Obtener o crear sesión
-    let session = await this.prisma.evaluationSession.findUnique({
+    // Obtener o crear sesión (atómico para evitar race conditions)
+    const session = await this.prisma.evaluationSession.upsert({
       where: { candidateId: candidate.id },
+      update: {}, // si ya existe, no la modificamos
+      create: {
+        candidateId: candidate.id,
+        status: 'in_progress',
+        startedAt: new Date(),
+      },
     });
-
-    if (!session) {
-      session = await this.prisma.evaluationSession.create({
-        data: {
-          candidateId: candidate.id,
-          status: 'in_progress',
-          startedAt: new Date(),
-        },
-      });
-    }
 
     // Actualizar estado del candidato
     await this.prisma.candidate.update({
@@ -206,73 +204,56 @@ Cuando termines de hablar, hacé click en el botón para indicarme que terminast
       data: { turnCount: candidateTurnNumber },
     });
 
-    // 5. ¿Es el último turn?
+    // 5. ¿Es el último turn del candidato?
     const isFinal = candidateTurnNumber >= MAX_TURNS;
 
-    let nextAudioUrl: string;
+    // 6. Obtener respuesta del agente (también genera cierre si es el último turn)
+    const campaign = await this.prisma.evaluationCampaign.findUnique({
+      where: { id: candidate.campaignId },
+      include: {
+        jobPosition: { select: { name: true, competencies: true } },
+        company: { select: { name: true } },
+      },
+    });
 
+    const allTurns = await this.prisma.conversationTurn.findMany({
+      where: { sessionId },
+      orderBy: { turnNumber: 'asc' },
+    });
+
+    const competencies = (campaign.jobPosition?.competencies as any[]) || [];
+
+    const nextQuestion = await this.openai.getNextAgentTurn({
+      position: campaign.jobPosition?.name || campaign.name,
+      company: campaign.company.name,
+      competencies,
+      conversationHistory: allTurns.map((t) => ({
+        speaker: t.speaker as 'agent' | 'candidate',
+        text: t.contentText,
+      })),
+      turnNumber: candidateTurnNumber,
+      totalTurns: MAX_TURNS,
+      candidateName: candidate.firstName,
+    });
+
+    // 6. TTS — sintetizar respuesta del agente
+    const agentAudioBuffer = await this.speech.synthesizeSpeech(nextQuestion);
+    const nextAudioUrl = await this.storage.uploadAgentAudio(agentAudioBuffer, sessionId, candidateTurnNumber + 1);
+
+    // 7. Guardar turno del agente
+    await this.prisma.conversationTurn.create({
+      data: {
+        sessionId,
+        turnNumber: candidateTurnNumber + 1,
+        speaker: 'agent',
+        contentText: nextQuestion,
+        audioUrl: nextAudioUrl,
+      },
+    });
+
+    // 8. Si era el último turno del candidato, finalizar sesión
     if (isFinal) {
-      // Generar despedida
-      const closingText = `Genial, ${candidate.firstName}. Eso es todo por hoy. Muchas gracias por tu tiempo y por ser tan claro o clara con tus respuestas. El equipo estará en contacto con vos próximamente. ¡Mucho éxito!`;
-      const closingBuffer = await this.speech.synthesizeSpeech(closingText);
-      nextAudioUrl = await this.storage.uploadAgentAudio(closingBuffer, sessionId, candidateTurnNumber + 1);
-
-      await this.prisma.conversationTurn.create({
-        data: {
-          sessionId,
-          turnNumber: candidateTurnNumber + 1,
-          speaker: 'agent',
-          contentText: closingText,
-          audioUrl: nextAudioUrl,
-        },
-      });
-
-      // Finalizar sesión
       await this.finalizeSession(sessionId, candidate.id);
-    } else {
-      // 6. LLM — generar siguiente pregunta del agente
-      const campaign = await this.prisma.evaluationCampaign.findUnique({
-        where: { id: candidate.campaignId },
-        include: {
-          jobPosition: { select: { name: true, competencies: true } },
-          company: { select: { name: true } },
-        },
-      });
-
-      const allTurns = await this.prisma.conversationTurn.findMany({
-        where: { sessionId },
-        orderBy: { turnNumber: 'asc' },
-      });
-
-      const competencies = (campaign.jobPosition?.competencies as any[]) || [];
-
-      const nextQuestion = await this.openai.getNextAgentTurn({
-        position: campaign.jobPosition?.name || campaign.name,
-        company: campaign.company.name,
-        competencies,
-        conversationHistory: allTurns.map((t) => ({
-          speaker: t.speaker as 'agent' | 'candidate',
-          text: t.contentText,
-        })),
-        turnNumber: candidateTurnNumber,
-        totalTurns: MAX_TURNS,
-        candidateName: candidate.firstName,
-      });
-
-      // 7. TTS — sintetizar respuesta del agente
-      const agentAudioBuffer = await this.speech.synthesizeSpeech(nextQuestion);
-      nextAudioUrl = await this.storage.uploadAgentAudio(agentAudioBuffer, sessionId, candidateTurnNumber + 1);
-
-      // 8. Guardar turno del agente
-      await this.prisma.conversationTurn.create({
-        data: {
-          sessionId,
-          turnNumber: candidateTurnNumber + 1,
-          speaker: 'agent',
-          contentText: nextQuestion,
-          audioUrl: nextAudioUrl,
-        },
-      });
     }
 
     return {
@@ -318,18 +299,38 @@ Cuando termines de hablar, hacé click en el botón para indicarme que terminast
       data: { status: 'completed' },
     });
 
-    // Encolar job de análisis asíncrono
-    await this.analysisQueue.add(
-      'analyze-session',
-      { sessionId, candidateId },
-      {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5000 },
-        removeOnComplete: true,
-      },
-    );
-
-    this.logger.log(`Sesión finalizada y encolada para análisis: ${sessionId}`);
+    // Intentar encolar en Bull/Redis; si falla, ejecutar síncronamente como fallback
+    try {
+      await this.analysisQueue.add(
+        'analyze-session',
+        { sessionId, candidateId },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: true,
+        },
+      );
+      this.logger.log(`Sesión finalizada y encolada para análisis: ${sessionId}`);
+    } catch (queueError) {
+      this.logger.warn(
+        `Queue no disponible (${(queueError as Error).message}). Ejecutando análisis síncronamente...`,
+      );
+      // Ejecutar análisis en background sin bloquear la respuesta al candidato
+      setImmediate(() =>
+        this.analysisService.runAnalysis(sessionId, candidateId).catch((err) => {
+          this.logger.error(`Error en análisis síncrono de sesión ${sessionId}:`, err);
+          this.prisma.evaluationSession
+            .update({
+              where: { id: sessionId },
+              data: {
+                analysisStatus: 'failed',
+                errorMessage: err instanceof Error ? err.message : String(err),
+              },
+            })
+            .catch(() => {});
+        }),
+      );
+    }
   }
 
   // ── Helper: buscar candidato válido por token ─────────────

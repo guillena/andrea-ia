@@ -2,8 +2,10 @@ import { Module } from '@nestjs/common';
 import { CandidatesService } from './candidates.service';
 import { CandidatesController } from './candidates.controller';
 import { EmailService } from '../../services/email.service';
+import { EvaluationModule } from '../evaluation/evaluation.module';
 
 @Module({
+  imports: [EvaluationModule],
   providers: [CandidatesService, EmailService],
   controllers: [CandidatesController],
   exports: [CandidatesService],

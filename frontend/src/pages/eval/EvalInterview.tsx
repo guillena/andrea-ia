@@ -48,8 +48,8 @@ export default function EvalInterview() {
       evalApi.sendTurn(token!, sessionId!, audioBlob),
     onSuccess: (data) => {
       if (data.isFinal) {
-        setPhase('finished');
-        setTimeout(() => navigate(`/eval/${token}/finished`), 2500);
+        // Reproducir audio de cierre y luego navegar — sin habilitar grabación
+        playClosingAudio(data.nextAudioUrl);
       } else {
         playAgentAudio(data.nextAudioUrl);
       }
@@ -60,7 +60,7 @@ export default function EvalInterview() {
     },
   });
 
-  // ── Reproducir audio del agente ───────────────────────────
+  // ── Reproducir audio del agente (turno normal → habilita grabación) ─
   const playAgentAudio = useCallback((audioUrl: string) => {
     setPhase('agent_speaking');
     if (audioRef.current) { audioRef.current.pause(); }
@@ -72,6 +72,22 @@ export default function EvalInterview() {
     });
     audio.onended = () => startRecording();
   }, []);
+
+  // ── Reproducir audio de cierre (isFinal → navegar al terminar) ───────
+  const playClosingAudio = useCallback((audioUrl: string) => {
+    setPhase('finished');
+    if (audioRef.current) { audioRef.current.pause(); }
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+    const goToFinished = () => navigate(`/eval/${token}/finished`);
+    audio.onended = goToFinished;
+    audio.play().catch(() => {
+      // Si el autoplay falla, navegar de todos modos tras 3s
+      setTimeout(goToFinished, 3000);
+    });
+    // Fallback: si el audio tarda más de 30s, navegar igual
+    setTimeout(goToFinished, 30_000);
+  }, [navigate, token]);
 
   // ── Grabar audio del candidato ────────────────────────────
   const startRecording = useCallback(async () => {

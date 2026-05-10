@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import OpenAI from 'openai';
+import { AzureOpenAI } from 'openai';
 
 // ── Tipos del motor de scoring ─────────────────────────────
 
@@ -39,14 +39,13 @@ export interface ConversationTurnInput {
 @Injectable()
 export class AzureOpenAIService {
   private readonly logger = new Logger(AzureOpenAIService.name);
-  private readonly client: OpenAI;
+  private readonly client: AzureOpenAI;
 
   constructor(private config: ConfigService) {
-    this.client = new OpenAI({
+    this.client = new AzureOpenAI({
       apiKey: this.config.get<string>('azure.openai.key'),
-      baseURL: `${this.config.get<string>('azure.openai.endpoint')}/openai/deployments`,
-      defaultQuery: { 'api-version': this.config.get<string>('azure.openai.apiVersion') },
-      defaultHeaders: { 'api-key': this.config.get<string>('azure.openai.key') },
+      endpoint: this.config.get<string>('azure.openai.endpoint'),
+      apiVersion: this.config.get<string>('azure.openai.apiVersion'),
     });
   }
 
@@ -66,33 +65,46 @@ export class AzureOpenAIService {
       .map((c) => `- ${c.name} (${c.dimension})`)
       .join('\n');
 
-    const historyText = conversationHistory
-      .map((t) => `${t.speaker === 'agent' ? 'ANDREA' : candidateName}: ${t.text}`)
-      .join('\n\n');
-
     const systemPrompt = `Eres ANDREA, una evaluadora laboral profesional conduciendo una entrevista estructurada.
 Estás evaluando a ${candidateName} para el puesto de ${position} en ${company}.
 
 COMPETENCIAS A EVALUAR:
 ${competenciesText}
 
-REGLAS:
+REGLAS ESTRICTAS:
 - Hacé UNA sola pregunta a la vez, clara y concisa.
-- Si la respuesta fue vaga o incompleta, repreguntá UNA vez solicitando un ejemplo concreto.
+- NUNCA repitas una pregunta que ya hiciste en el historial. Avanzá siempre hacia una competencia nueva o un aspecto diferente.
+- Si el candidato ya respondió una pregunta (aunque sea brevemente), dala por respondida y pasá a la siguiente.
+- Solo repreguntá si la respuesta fue totalmente incomprensible o en blanco — y solo UNA vez sobre el mismo punto.
 - NO emitas juicios ("muy bien", "incorrecto"). Respondé de forma neutra ("Entendido.", "Gracias.").
 - NO preguntes sobre salud, religión, política, orientación sexual, estado civil, embarazo.
 - Mantené un tono cálido, profesional y empático.
 - Turno ${turnNumber} de ${totalTurns} estimados. ${turnNumber >= totalTurns - 1 ? 'Es el momento de ir cerrando la entrevista.' : ''}
 - Si es el último turno, agradecé al candidato y cerrá la entrevista calidamente.
 
-HISTORIAL:
-${historyText || '[Inicio de entrevista]'}
-
 Generá SOLO tu próxima respuesta como ANDREA (sin prefijo "ANDREA:").`;
+
+    // Construir el array de mensajes con roles user/assistant reales
+    // El turn 0 es siempre el intro del agente (bienvenida), lo omitimos del chat
+    const chatMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemPrompt },
+    ];
+
+    // Excluir el turn 0 (intro) — empezar desde el primer intercambio real
+    const relevantTurns = conversationHistory.filter((t) => t.text !== '[Inicio de entrevista]');
+
+    for (const turn of relevantTurns) {
+      if (turn.speaker === 'agent') {
+        chatMessages.push({ role: 'assistant', content: turn.text });
+      } else {
+        // speaker === 'candidate'
+        chatMessages.push({ role: 'user', content: turn.text });
+      }
+    }
 
     const response = await this.client.chat.completions.create({
       model: this.config.get<string>('azure.openai.deploymentGpt4oMini'),
-      messages: [{ role: 'system', content: systemPrompt }],
+      messages: chatMessages,
       temperature: 0.7,
       max_tokens: 250,
     });

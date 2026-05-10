@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCandidateDto, CandidateDecisionDto } from './dto/candidate.dto';
 import { EmailService } from '../../services/email.service';
+import { AnalysisService } from '../evaluation/analysis.service';
 
 @Injectable()
 export class CandidatesService {
@@ -13,6 +14,7 @@ export class CandidatesService {
     private prisma: PrismaService,
     private config: ConfigService,
     private email: EmailService,
+    private analysisService: AnalysisService,
   ) {}
 
   async findAll(
@@ -145,5 +147,47 @@ export class CandidatesService {
     });
     if (!c) throw new NotFoundException('Candidato no encontrado');
     return c.session?.turns || [];
+  }
+
+  /**
+   * Re-ejecuta el análisis para candidatos con evaluación completada pero sin reporte.
+   * Útil cuando el job de Bull/Redis falló o no estaba disponible.
+   */
+  async reanalyze(candidateId: string, companyId: string) {
+    const c = await this.prisma.candidate.findFirst({
+      where: { id: candidateId, companyId },
+      include: { session: { select: { id: true, analysisStatus: true, status: true } } },
+    });
+    if (!c) throw new NotFoundException('Candidato no encontrado');
+
+    if (c.status !== 'completed') {
+      throw new BadRequestException('El candidato no ha completado la evaluación');
+    }
+    if (!c.session) {
+      throw new BadRequestException('No hay sesión de evaluación registrada');
+    }
+    if (c.session.analysisStatus === 'processing') {
+      throw new BadRequestException('El análisis ya está en curso');
+    }
+
+    this.logger.log(`Re-análisis solicitado para candidato: ${candidateId}`);
+
+    // Ejecutar en background
+    setImmediate(() =>
+      this.analysisService.runAnalysis(c.session!.id, candidateId).catch((err) => {
+        this.logger.error(`Error en re-análisis de candidato ${candidateId}:`, err);
+        this.prisma.evaluationSession
+          .update({
+            where: { id: c.session!.id },
+            data: {
+              analysisStatus: 'failed',
+              errorMessage: err instanceof Error ? err.message : String(err),
+            },
+          })
+          .catch(() => {});
+      }),
+    );
+
+    return { message: 'Análisis iniciado. El reporte estará disponible en pocos segundos.' };
   }
 }

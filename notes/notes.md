@@ -34,5 +34,5 @@ npm run dev
 
 # Commit
 git add .
-git commit -m "CORS 1"
+git commit -m "Ajsutes menu y centrado"
 git push origin main

@@ -83,4 +83,5 @@ export const candidatesApi = {
     (await api.patch(`/candidates/${id}/decision`, { decision, notes })).data,
   report: async (id: string) => (await api.get(`/candidates/${id}/report`)).data,
   transcript: async (id: string) => (await api.get(`/candidates/${id}/transcript`)).data,
+  reanalyze: async (id: string) => (await api.post(`/candidates/${id}/reanalyze`)).data,
 };

@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bull';
 import { EvaluationService } from './evaluation.service';
 import { EvaluationController } from './evaluation.controller';
 import { AnalysisProcessor } from './analysis.processor';
+import { AnalysisService } from './analysis.service';
 import { AzureSpeechService } from '../../services/azure-speech.service';
 import { AzureOpenAIService } from '../../services/azure-openai.service';
 import { StorageService } from '../../services/storage.service';
@@ -13,12 +14,13 @@ import { StorageService } from '../../services/storage.service';
   ],
   providers: [
     EvaluationService,
+    AnalysisService,
     AnalysisProcessor,
     AzureSpeechService,
     AzureOpenAIService,
     StorageService,
   ],
   controllers: [EvaluationController],
-  exports: [EvaluationService],
+  exports: [EvaluationService, AnalysisService],
 })
 export class EvaluationModule {}

@@ -65,4 +65,10 @@ export class CandidatesController {
   getTranscript(@Param('id') id: string, @CurrentUser('companyId') companyId: string) {
     return this.service.getTranscript(id, companyId);
   }
+
+  @Post(':id/reanalyze')
+  @ApiOperation({ summary: 'Re-ejecutar análisis de una evaluación completada' })
+  reanalyze(@Param('id') id: string, @CurrentUser('companyId') companyId: string) {
+    return this.service.reanalyze(id, companyId);
+  }
 }
