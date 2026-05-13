@@ -6,8 +6,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { Request } from 'express';
 import { EvaluationService } from './evaluation.service';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Evaluación (Candidato — Público)')
+@Public()
 @Controller('eval')
 export class EvaluationController {
   constructor(private evalService: EvaluationService) {}

@@ -1,7 +1,9 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, Res, HttpStatus } from '@nestjs/common';
+import { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { CandidatesService } from './candidates.service';
+import { PdfService } from './pdf.service';
 import { CreateCandidateDto, CandidateDecisionDto } from './dto/candidate.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -10,7 +12,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @UseGuards(AuthGuard('jwt'))
 @ApiBearerAuth()
 export class CandidatesController {
-  constructor(private service: CandidatesService) {}
+  constructor(
+    private service: CandidatesService,
+    private pdfService: PdfService
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Listar candidatos (con filtros opcionales)' })
@@ -58,6 +63,36 @@ export class CandidatesController {
   @ApiOperation({ summary: 'Ver reporte de un candidato' })
   getReport(@Param('id') id: string, @CurrentUser('companyId') companyId: string) {
     return this.service.getReport(id, companyId);
+  }
+
+  @Get(':id/report/pdf')
+  @ApiOperation({ summary: 'Descargar reporte PDF de un candidato' })
+  async downloadReportPdf(
+    @Param('id') id: string, 
+    @CurrentUser('companyId') companyId: string,
+    @Res() res: Response
+  ) {
+    const candidate = await this.service.getReport(id, companyId);
+    if (!candidate || !candidate.session) {
+      return res.status(HttpStatus.NOT_FOUND).json({ message: 'Reporte no encontrado' });
+    }
+
+    const data = {
+      candidate,
+      session: candidate.session,
+      jobPosition: candidate.campaign?.jobPosition || { name: candidate.campaign?.name || 'Puesto no especificado' },
+      score: candidate.session?.score,
+      report: candidate.session?.report
+    };
+
+    const stream = await this.pdfService.generateCandidateReport(data);
+    
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="Reporte_ANDREA_${candidate.firstName}_${candidate.lastName}.pdf"`,
+    });
+    
+    stream.pipe(res);
   }
 
   @Get(':id/transcript')

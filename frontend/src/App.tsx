@@ -13,10 +13,11 @@ import EvalExpired    from './pages/eval/EvalExpired';
 // ── Portal empresa ────────────────────────────────────────
 import Login          from './pages/company/Login';
 import Dashboard      from './pages/company/Dashboard';
-import Campaigns      from './pages/company/Campaigns';
+import Searches      from './pages/company/Searches';
 import Candidates     from './pages/company/Candidates';
 import CandidateReport from './pages/company/CandidateReport';
 import Settings       from './pages/company/Settings';
+import Users          from './pages/company/Users';
 
 // ── Guards ────────────────────────────────────────────────
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -51,10 +52,11 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<PortalLayout />}>
               <Route path="/dashboard"               element={<Dashboard />} />
-              <Route path="/campaigns"               element={<Campaigns />} />
-              <Route path="/campaigns/:campaignId/candidates" element={<Candidates />} />
+              <Route path="/searches"               element={<Searches />} />
+              <Route path="/searches/:searchId/candidates" element={<Candidates />} />
               <Route path="/candidates/:candidateId/report"   element={<CandidateReport />} />
               <Route path="/settings"                element={<Settings />} />
+              <Route path="/users"                   element={<Users />} />
             </Route>
           </Route>
 

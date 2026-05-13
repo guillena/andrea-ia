@@ -375,3 +375,22 @@ model AuditLog {
   @@index([action, createdAt(sort: Desc)])
   @@map("audit_logs")
 }
+
+// ─────────────────────────────────────────────────────────────
+// SYSTEM LOGS (Monitoreo técnico)
+// ─────────────────────────────────────────────────────────────
+
+model SystemLog {
+  id        String   @id @default(uuid())
+  level     String   @db.VarChar(10)     // error | warn | info
+  source    String   @db.VarChar(50)     // AzureOpenAI | AzureSpeech | System
+  message   String   @db.Text
+  details   Json?                        // Stack trace, raw error, context
+  sessionId String?                      // Link opcional a la sesión
+  createdAt DateTime @default(now())
+
+  @@index([level])
+  @@index([source])
+  @@index([createdAt])
+  @@map("system_logs")
+}

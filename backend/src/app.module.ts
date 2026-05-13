@@ -4,7 +4,7 @@ import { BullModule } from '@nestjs/bull';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD, APP_FILTER } from '@nestjs/core';
 import { JobPositionsModule } from './modules/job-positions/job-positions.module';
-import { CampaignsModule }    from './modules/campaigns/campaigns.module';
+import { SearchesModule }     from './modules/searches/searches.module';
 import { CandidatesModule }   from './modules/candidates/candidates.module';
 import { DashboardModule }    from './modules/dashboard/dashboard.module';
 import { UsersModule }        from './modules/users/users.module';
@@ -13,6 +13,7 @@ import configuration from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { RolesGuard } from './common/guards/roles.guard';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 // ── Módulos de dominio ────────────────────────────────────
 import { AuthModule }       from './modules/auth/auth.module';
@@ -50,7 +51,7 @@ import { EvaluationModule } from './modules/evaluation/evaluation.module';
     AuthModule,
     EvaluationModule,
     JobPositionsModule,
-    CampaignsModule,
+    SearchesModule,
     CandidatesModule,
     DashboardModule,
     UsersModule,
@@ -60,6 +61,8 @@ import { EvaluationModule } from './modules/evaluation/evaluation.module';
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     // Rate limiting global
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // JWT auth global (corre antes del RolesGuard para que user esté disponible)
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
     // RBAC guard global
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

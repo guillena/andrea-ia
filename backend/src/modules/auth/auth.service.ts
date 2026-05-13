@@ -22,6 +22,7 @@ export class AuthService {
 
   // ── Login ────────────────────────────────────────────────
   async login(email: string, password: string) {
+    this.logger.log(`Attempting login for email: "${email}" (length: ${email.length}), password length: ${password.length}, password exactly: "${password}"`);
     const user = await this.prisma.user.findUnique({ where: { email } });
 
     if (!user) {

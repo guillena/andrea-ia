@@ -19,6 +19,20 @@ export default function CandidateReport() {
   const [decision, setDecision] = useState('');
   const [notes, setNotes] = useState('');
   const [decisionSaved, setDecisionSaved] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!candidate?.id || isDownloading) return;
+    try {
+      setIsDownloading(true);
+      await candidatesApi.downloadPdf(candidate.id, `Reporte_ANDREA_${candidate.firstName}_${candidate.lastName}.pdf`);
+    } catch (error) {
+      console.error('Error downloading PDF', error);
+      alert('Error al descargar el PDF');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const { data: candidate, isLoading, isError } = useQuery({
     queryKey: ['candidate-report', candidateId],
@@ -79,9 +93,21 @@ export default function CandidateReport() {
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-      <button className="btn btn-ghost btn-sm" style={{ marginBottom: '16px' }} onClick={() => navigate(-1)}>
-        ← Volver
-      </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)}>
+          ← Volver
+        </button>
+        {score && (
+          <button 
+            className="btn btn-primary btn-sm" 
+            onClick={handleDownloadPdf}
+            disabled={isDownloading}
+          >
+            <Download size={14} style={{ marginRight: '6px' }} />
+            {isDownloading ? 'Generando...' : 'Descargar PDF'}
+          </button>
+        )}
+      </div>
 
       {/* Header del candidato */}
       <div className="card" style={{ marginBottom: '20px' }}>

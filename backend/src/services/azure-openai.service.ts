@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AzureOpenAI } from 'openai';
+import { SystemLogService } from './system-log.service';
 
 // ── Tipos del motor de scoring ─────────────────────────────
 
@@ -41,7 +42,10 @@ export class AzureOpenAIService {
   private readonly logger = new Logger(AzureOpenAIService.name);
   private readonly client: AzureOpenAI;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private systemLog: SystemLogService,
+  ) {
     this.client = new AzureOpenAI({
       apiKey: this.config.get<string>('azure.openai.key'),
       endpoint: this.config.get<string>('azure.openai.endpoint'),
@@ -102,14 +106,37 @@ Generá SOLO tu próxima respuesta como ANDREA (sin prefijo "ANDREA:").`;
       }
     }
 
-    const response = await this.client.chat.completions.create({
-      model: this.config.get<string>('azure.openai.deploymentGpt4oMini'),
-      messages: chatMessages,
-      temperature: 0.7,
-      max_tokens: 250,
-    });
+    try {
+      const response = await this.client.chat.completions.create({
+        model: this.config.get<string>('azure.openai.deploymentGpt4oMini'),
+        messages: chatMessages,
+        temperature: 0.7,
+        max_tokens: 250,
+      });
 
-    return response.choices[0]?.message?.content?.trim() || 'Continuemos. ¿Podés contarme más al respecto?';
+      return response.choices[0]?.message?.content?.trim() || 'Entendido. ¿Podrías contarme un poco más sobre eso?';
+    } catch (error: any) {
+      // Registrar el error técnico en SystemLog para el administrador
+      await this.systemLog.logError(
+        'AzureOpenAI',
+        `Error en generación de turno: ${error.message}`,
+        { 
+          turnNumber, 
+          candidateName,
+          errorResponse: error.response?.data || error.message,
+          contentFilterTriggered: error.status === 400 || error.message.includes('content management policy')
+        }
+      );
+
+      // Si el error es por filtro de contenido o similar, devolvemos un fallback para no romper la entrevista
+      if (error.status === 400 || error.message.includes('content management policy')) {
+        this.logger.warn('La respuesta fue filtrada por Azure Content Safety. Usando fallback.');
+        return 'Entendido, gracias por compartir eso. Para continuar, ¿podrías darme otro ejemplo de una situación similar en tu experiencia profesional?';
+      }
+
+      // En otros casos, re-lanzamos o devolvemos un fallback genérico
+      return 'Interesante. Contame un poco más sobre cómo manejaste eso o qué aprendiste de esa experiencia.';
+    }
   }
 
   // ── Análisis completo post-sesión ─────────────────────────

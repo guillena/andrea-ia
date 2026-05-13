@@ -14,11 +14,12 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Si el token expiró, redirigir al login
+// Si el token expiró, redirigir al login (pero NO si la ruta es el propio login)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const isLoginEndpoint = error.config?.url?.includes('/auth/login');
+    if (error.response?.status === 401 && !isLoginEndpoint) {
       localStorage.removeItem('andrea_token');
       window.location.href = '/login';
     }
@@ -30,7 +31,7 @@ api.interceptors.response.use(
 
 export const authApi = {
   login: async (email: string, password: string) => {
-    const res = await api.post('/auth/login', { email, password });
+    const res = await api.post('/auth/login', { email: email.trim(), password });
     localStorage.setItem('andrea_token', res.data.accessToken);
     localStorage.setItem('andrea_refresh', res.data.refreshToken);
     return res.data;
@@ -60,14 +61,14 @@ export const jobPositionsApi = {
     (await api.patch(`/job-positions/${id}/competencies`, { competencies })).data,
 };
 
-// ── Campaigns ─────────────────────────────────────────────
+// ── Searches ──────────────────────────────────────────────
 
-export const campaignsApi = {
-  list: async (page = 1) => (await api.get(`/campaigns?page=${page}`)).data,
-  get: async (id: string) => (await api.get(`/campaigns/${id}`)).data,
-  create: async (data: any) => (await api.post('/campaigns', data)).data,
-  update: async (id: string, data: any) => (await api.patch(`/campaigns/${id}`, data)).data,
-  stats: async (id: string) => (await api.get(`/campaigns/${id}/stats`)).data,
+export const searchesApi = {
+  list: async (page = 1) => (await api.get(`/searches?page=${page}`)).data,
+  get: async (id: string) => (await api.get(`/searches/${id}`)).data,
+  create: async (data: any) => (await api.post('/searches', data)).data,
+  update: async (id: string, data: any) => (await api.patch(`/searches/${id}`, data)).data,
+  stats: async (id: string) => (await api.get(`/searches/${id}/stats`)).data,
 };
 
 // ── Candidates ────────────────────────────────────────────
@@ -82,6 +83,27 @@ export const candidatesApi = {
   decision: async (id: string, decision: string, notes?: string) =>
     (await api.patch(`/candidates/${id}/decision`, { decision, notes })).data,
   report: async (id: string) => (await api.get(`/candidates/${id}/report`)).data,
+  downloadPdf: async (id: string, fileName: string) => {
+    const res = await api.get(`/candidates/${id}/report/pdf`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.parentNode?.removeChild(link);
+  },
   transcript: async (id: string) => (await api.get(`/candidates/${id}/transcript`)).data,
   reanalyze: async (id: string) => (await api.post(`/candidates/${id}/reanalyze`)).data,
 };
+
+// ── Users ──────────────────────────────────────────────────
+
+export const usersApi = {
+  list: async () => (await api.get('/users')).data,
+  create: async (data: any) => (await api.post('/users', data)).data,
+  update: async (id: string, data: any) => (await api.patch(`/users/${id}`, data)).data,
+  changePassword: async (data: { currentPassword: string; newPassword: string }) =>
+    (await api.patch('/users/me/password', data)).data,
+};
+

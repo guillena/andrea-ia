@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, ChevronRight, Pause, CheckCircle, Settings } from 'lucide-react';
-import { campaignsApi, jobPositionsApi } from '../../services/api';
+import { Plus, ChevronRight, CheckCircle, Settings, X } from 'lucide-react';
+import { searchesApi, jobPositionsApi } from '../../services/api';
 
 const DIM_COLOR: Record<string, string> = {
   cognitiva:    'var(--color-indigo)',
@@ -21,17 +21,17 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   closed: { label: 'Cerrada', color: 'var(--color-text-muted)' },
 };
 
-export default function Campaigns() {
+export default function Searches() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [showModal, setShowModal] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<any>(null);
   const [showCompetencies, setShowCompetencies] = useState(false);
   const [form, setForm] = useState({ name: '', jobPositionId: '', linkExpiryDays: 7 });
 
-  const { data: campaigns, isLoading } = useQuery({
-    queryKey: ['campaigns'],
-    queryFn: () => campaignsApi.list(),
+  const { data: searches, isLoading } = useQuery({
+    queryKey: ['searches'],
+    queryFn: () => searchesApi.list(),
   });
 
   const { data: positions } = useQuery({
@@ -40,21 +40,24 @@ export default function Campaigns() {
   });
 
   const createMutation = useMutation({
-    mutationFn: campaignsApi.create,
+    mutationFn: searchesApi.create,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-      setShowModal(false);
-      setForm({ name: '', jobPositionId: '', linkExpiryDays: 7 });
-      setSelectedPosition(null);
-      setShowCompetencies(false);
+      queryClient.invalidateQueries({ queryKey: ['searches'] });
+      closeDrawer();
     },
   });
+
+  const closeDrawer = () => {
+    setShowDrawer(false);
+    setShowCompetencies(false);
+    setSelectedPosition(null);
+    setForm({ name: '', jobPositionId: '', linkExpiryDays: 7 });
+  };
 
   const handlePositionChange = (posId: string) => {
     const pos = positions?.find((p: any) => p.id === posId);
     setSelectedPosition(pos || null);
     setForm((f) => ({ ...f, jobPositionId: posId }));
-    if (pos) setShowCompetencies(true);
   };
 
   const handleCreate = (e: React.FormEvent) => {
@@ -66,40 +69,35 @@ export default function Campaigns() {
     <div>
       <div className="page-header">
         <h1 className="page-title">Búsquedas</h1>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+        <button className="btn btn-primary" onClick={() => setShowDrawer(true)}>
           <Plus size={16} /> Nueva búsqueda
         </button>
       </div>
 
       {isLoading ? (
         <p className="text-muted">Cargando...</p>
-      ) : (campaigns?.data || []).length === 0 ? (
+      ) : (searches?.data || []).length === 0 ? (
         <div className="card text-center" style={{ padding: '48px' }}>
           <p className="text-muted" style={{ marginBottom: '16px' }}>No tenés búsquedas activas.</p>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+          <button className="btn btn-primary" onClick={() => setShowDrawer(true)}>
             Crear la primera búsqueda
           </button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {(campaigns?.data || []).map((c: any) => (
+          {(searches?.data || []).map((c: any) => (
             <div
               key={c.id}
               className="card"
               style={{ cursor: 'pointer', padding: '20px 24px' }}
-              onClick={() => navigate(`/campaigns/${c.id}/candidates`)}
+              onClick={() => navigate(`/searches/${c.id}/candidates`)}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <p style={{ fontWeight: 600, fontSize: '16px', marginBottom: '4px' }}>{c.name}</p>
                   <p className="text-sm text-muted">
                     {c.jobPosition?.name || 'Sin puesto definido'} ·{' '}
-                    <span
-                      style={{
-                        color: STATUS_MAP[c.status]?.color,
-                        fontWeight: 500,
-                      }}
-                    >
+                    <span style={{ color: STATUS_MAP[c.status]?.color, fontWeight: 500 }}>
                       {STATUS_MAP[c.status]?.label}
                     </span>
                   </p>
@@ -119,14 +117,11 @@ export default function Campaigns() {
         </div>
       )}
 
-      {/* Modal nueva campaña */}
-      {showModal && (
-        <Modal onClose={() => { setShowModal(false); setShowCompetencies(false); setSelectedPosition(null); }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '24px' }}>
-            Nueva búsqueda
-          </h2>
-
+      {/* ── Drawer nueva búsqueda ─────────────────────────────── */}
+      {showDrawer && (
+        <Drawer onClose={closeDrawer} title="Nueva búsqueda">
           {!showCompetencies ? (
+            /* Paso 1: datos de la búsqueda */
             <form onSubmit={(e) => { e.preventDefault(); if (form.jobPositionId) setShowCompetencies(true); }}>
               <div className="form-group">
                 <label className="form-label">Nombre de la búsqueda</label>
@@ -163,13 +158,14 @@ export default function Campaigns() {
               <button
                 type="submit"
                 className="btn btn-primary w-full"
+                style={{ marginTop: '8px' }}
                 disabled={!form.name || !form.jobPositionId}
               >
                 Revisar competencias <ChevronRight size={16} />
               </button>
             </form>
           ) : (
-            /* Paso 2: revisión de competencias del puesto */
+            /* Paso 2: confirmar competencias */
             <div>
               <p style={{ marginBottom: '4px', fontWeight: 600, fontSize: '15px' }}>
                 Competencias a evaluar
@@ -217,53 +213,76 @@ export default function Campaigns() {
               <button
                 className="btn btn-ghost btn-sm"
                 style={{ marginBottom: '20px', fontSize: '12px' }}
-                onClick={() => { setShowModal(false); setShowCompetencies(false); navigate('/settings'); }}
+                onClick={() => { closeDrawer(); navigate('/settings'); }}
               >
                 <Settings size={13} /> Modificar competencias del puesto
               </button>
 
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button
-                  className="btn btn-ghost w-full"
-                  onClick={() => setShowCompetencies(false)}
-                >
-                  ← Volver
-                </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <button
                   className="btn btn-primary w-full"
                   onClick={handleCreate as any}
                   disabled={createMutation.isPending}
                 >
-                  {createMutation.isPending ? 'Creando...' : 'Confirmar y crear'}
+                  {createMutation.isPending ? 'Creando...' : 'Confirmar y crear búsqueda'}
+                </button>
+                <button className="btn btn-ghost w-full" onClick={() => setShowCompetencies(false)}>
+                  ← Volver
                 </button>
               </div>
             </div>
           )}
-        </Modal>
+        </Drawer>
       )}
     </div>
   );
 }
 
-function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+// ── Drawer ────────────────────────────────────────────────────
+
+function Drawer({
+  children,
+  onClose,
+  title,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+  title: string;
+}) {
   return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 50,
-        background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
-      }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
+    <>
+      {/* Overlay */}
       <div
         style={{
-          background: 'var(--color-white)', borderRadius: 'var(--radius-xl)',
-          padding: '32px', width: '100%', maxWidth: '480px',
-          boxShadow: 'var(--shadow-lg)', maxHeight: '90vh', overflowY: 'auto',
+          position: 'fixed', inset: 0, zIndex: 40,
+          background: 'rgba(0,0,0,0.25)', backdropFilter: 'blur(2px)',
+        }}
+        onClick={onClose}
+      />
+      {/* Panel */}
+      <div
+        style={{
+          position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 50,
+          width: '420px', maxWidth: '100vw',
+          background: 'var(--color-white)',
+          boxShadow: '-4px 0 32px rgba(0,0,0,0.12)',
+          padding: '28px 24px',
+          overflowY: 'auto',
+          display: 'flex', flexDirection: 'column',
         }}
       >
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 600 }}>{title}</h2>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex' }}
+          >
+            <X size={18} color="var(--color-text-muted)" />
+          </button>
+        </div>
         {children}
       </div>
-    </div>
+    </>
   );
 }

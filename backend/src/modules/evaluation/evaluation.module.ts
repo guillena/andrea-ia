@@ -7,6 +7,7 @@ import { AnalysisService } from './analysis.service';
 import { AzureSpeechService } from '../../services/azure-speech.service';
 import { AzureOpenAIService } from '../../services/azure-openai.service';
 import { StorageService } from '../../services/storage.service';
+import { SystemLogService } from '../../services/system-log.service';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { StorageService } from '../../services/storage.service';
     AzureSpeechService,
     AzureOpenAIService,
     StorageService,
+    SystemLogService,
   ],
   controllers: [EvaluationController],
   exports: [EvaluationService, AnalysisService],
